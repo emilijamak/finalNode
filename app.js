@@ -2,9 +2,13 @@ const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 const { Server } = require("socket.io");
+
 const { createServer } = require("http");
 const mainRouter = require("./routers/mainRouter");
 require("dotenv").config();
+
+
+
 
 const app = express();
 
@@ -32,7 +36,7 @@ io.on("connection", (socket) => {
     // Add more socket event handlers if needed
 });
 
-const PORT = process.env.PORT || 2001;
+const PORT = process.env.PORT ||  2000;
 
 httpServer.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
