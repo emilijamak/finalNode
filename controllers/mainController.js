@@ -164,11 +164,19 @@ module.exports = {
         }
     }, sendMessage: async (req, res) => {
         const { sender, recipient, message, timestamp } = req.body;
+
+        const msg = {
+            sender: sender,
+            recipient: recipient,
+            message: message,
+            timestamp: timestamp,
+            read: false
+        }
         try {
-            const newMessage = new messageDb({ sender, recipient, message, timestamp });
+            const newMessage = new messageDb(msg);
             await newMessage.save();
 
-            res.send({ error: false, message: "message send", data: null });
+            res.send({ error: false, message: "Message send successfully", data: null });
 
         } catch (error) {
             res.send({ error: true, message: "error", data: null });
