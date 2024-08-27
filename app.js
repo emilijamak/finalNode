@@ -31,11 +31,18 @@ const io = new Server(httpServer, {
     }
 });
 
-io.on("connection", (socket) => {
-    console.log("a user connected");
-    // Add more socket event handlers if needed
-});
+io.on('connection', (socket) => {
+    console.log('A user connected:', socket.id);
 
+    // Handle sending and receiving messages
+    socket.on('sendMessage', (messageData) => {
+        io.emit('receiveMessage', messageData); // Broadcast to all clients
+    });
+
+    socket.on('disconnect', () => {
+        console.log('A user disconnected:', socket.id);
+    });
+});
 const PORT = process.env.PORT ||  2000;
 
 httpServer.listen(PORT, () => {

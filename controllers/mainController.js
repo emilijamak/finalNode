@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const resSend = require('../plugins/sendRes');
 const userDb = require("../schemas/userSchema");
+const messageDb = require("../schemas/messageSchema")
 
 
 module.exports = {
@@ -116,5 +117,63 @@ module.exports = {
             res.send({ error: true, message: "Server error", data: null });
         }
 
+    },
+    changePassword: async (req, res) => {
+        const { userID, password, username } = req.body;
+
+        const currentUser = await userDb.findOne({ _id: userID, username });
+
+        if (!currentUser) {
+            return res.send({ error: true, message: "User not found", data: null });
+        }
+
+        try {
+            // Hash the new password
+            const salt = await bcrypt.genSalt(10);
+            // Update the user's password
+            currentUser.password = await bcrypt.hash(password, salt);
+            await currentUser.save();
+
+            // Send success response
+            res.send({ error: false, message: "Password changed successfully", data: null });
+        } catch (error) {
+            console.error("Error changing password:", error);
+            res.send({ error: true, message: "Server error", data: null });
+        }
+    },
+    getAllUsers: async (req, res) => {
+        try {
+            const users = await userDb.find().select('-password'); // Exclude passwords
+            res.send({ error: false, message: "Users fetched successfully", data: users });
+        } catch (error) {
+            console.error("Error fetching users:", error);
+            res.send({ error: true, message: "Server error", data: null });
+        }
+    },
+    getUserByUsername: async (req, res) => {
+        try {
+            const user = await userDb.findOne({ username: req.params.username }).select('-password'); // Exclude password
+            if (user) {
+                res.send({ error: false, message: "User fetched successfully", data: user });
+            } else {
+                res.send({ error: true, message: "User not found", data: null });
+            }
+        } catch (error) {
+            console.error("Error fetching user:", error);
+            res.send({ error: true, message: "Server error", data: null });
+        }
+    }, sendMessage: async (req, res) => {
+        const { sender, recipient, message, timestamp } = req.body;
+        try {
+            const newMessage = new messageDb({ sender, recipient, message, timestamp });
+            await newMessage.save();
+
+            res.send({ error: false, message: "message send", data: null });
+
+        } catch (error) {
+            res.send({ error: true, message: "error", data: null });
+
+        }
     }
+
 };

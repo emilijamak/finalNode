@@ -77,5 +77,25 @@ module.exports = {
         next()
 
 
+    },
+    messageValidate: (req, res, next) => {
+
+        const {sender, recipient, message, timestamp} = req.body
+
+        if (sender.length < 1) {
+            return res.send({error: true, message: "You need to log in to send messages", data: null})
+
+        }
+        if (recipient.length < 1) {
+            return res.send({error: true, message: "Recipient not found", data: null})
+
+        }
+        if (message.length < 1 || message.length > 200) {
+            return res.send({error: true, message: "Message should be longer then 1 symbol and shorter then 200.", data: null})
+        }
+
+        next()
+
+
     }
 }
