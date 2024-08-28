@@ -2,7 +2,7 @@ const express = require('express')
 const Router = express.Router()
 const {
     register,
-    login, changeImage, changeUsername, changePassword, getAllUsers, getUserByUsername, sendMessage
+    login, changeImage, changeUsername, changePassword, getAllUsers, getUserByUsername, sendMessage, getMessages
 } = require("../controllers/mainController")
 
 
@@ -23,6 +23,8 @@ Router.post('/change-password', authMiddle, registerUserValidate,  changePasswor
 Router.post('/send-message', authMiddle, messageValidate, sendMessage)
 Router.get('/get-all-users', getAllUsers)
 Router.get('/get-user/:username', getUserByUsername)
+Router.get('/get-messages/:sender/:recipient', getMessages);
+
 
 
 

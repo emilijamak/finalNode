@@ -4,9 +4,13 @@ const jwt = require('jsonwebtoken');
 const resSend = require('../plugins/sendRes');
 const userDb = require("../schemas/userSchema");
 const messageDb = require("../schemas/messageSchema")
+const { io } = require('../app'); // Adjust the path to where your socket instance is exported
+
 
 
 module.exports = {
+
+
     register: async (req, res) => {
         const { password, username } = req.body;
 
@@ -181,6 +185,42 @@ module.exports = {
         } catch (error) {
             res.send({ error: true, message: "error", data: null });
 
+        }
+    },
+    getMessages: async (req, res) => {
+        const { sender, recipient } = req.params;
+
+        try {
+            // Fetch messages
+            const messages = await messageDb.find({
+                $or: [
+                    { sender: sender, recipient: recipient },
+                    { sender: recipient, recipient: sender }
+                ]
+            }).sort({ timestamp: 1 }); // Sort messages by timestamp in ascending order
+
+            // Fetch sender and recipient details
+            const [senderUser, recipientUser] = await Promise.all([
+                userDb.findOne({ username: sender }).select('username image'),
+                userDb.findOne({ username: recipient }).select('username image')
+            ]);
+
+            // Add sender and recipient images to each message
+            const messagesWithImages = messages.map(message => ({
+                ...message.toObject(), // Convert Mongoose document to plain object
+                senderImage: senderUser?.image || null,
+                recipientImage: recipientUser?.image || null
+            }));
+            // io.emit('message', messagesWithImages);
+
+            if (messages.length > 0) {
+                res.send({ error: false, message: "Messages fetched successfully", data: messagesWithImages });
+            } else {
+                res.send({ error: true, message: "No messages found", data: [] });
+            }
+        } catch (error) {
+            console.error("Error fetching messages:", error);
+            res.send({ error: true, message: "Server error", data: null });
         }
     }
 
