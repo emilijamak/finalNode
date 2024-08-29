@@ -22,6 +22,10 @@ const messageSchema = new Schema({
         type: Boolean,
         required: true,
         defaultValue: false
+    },
+    liked: {
+        type: [String],
+        default: []
     }
 
 });

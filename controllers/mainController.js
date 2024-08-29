@@ -10,7 +10,6 @@ const { io } = require('../app'); // Adjust the path to where your socket instan
 
 module.exports = {
 
-
     register: async (req, res) => {
         const { password, username } = req.body;
 
@@ -175,18 +174,31 @@ module.exports = {
             message: message,
             timestamp: timestamp,
             read: false
-        }
+        };
+
         try {
             const newMessage = new messageDb(msg);
-            await newMessage.save();
+            const savedMessage = await newMessage.save();
 
-            res.send({ error: false, message: "Message send successfully", data: null });
+            // Include the id in the response
+            res.send({
+                error: false,
+                message: "Message sent successfully",
+                data: {
+                    ...savedMessage.toObject(),  // Convert mongoose document to plain object
+                    _id: savedMessage._id.toString() // Ensure _id is a string
+                }
+            });
 
         } catch (error) {
-            res.send({ error: true, message: "error", data: null });
-
+            res.send({
+                error: true,
+                message: "Error",
+                data: null
+            });
         }
     },
+
     getMessages: async (req, res) => {
         const { sender, recipient } = req.params;
 
@@ -211,10 +223,11 @@ module.exports = {
                 senderImage: senderUser?.image || null,
                 recipientImage: recipientUser?.image || null
             }));
-            // io.emit('message', messagesWithImages);
+
 
             if (messages.length > 0) {
                 res.send({ error: false, message: "Messages fetched successfully", data: messagesWithImages });
+
             } else {
                 res.send({ error: true, message: "No messages found", data: [] });
             }
@@ -222,6 +235,52 @@ module.exports = {
             console.error("Error fetching messages:", error);
             res.send({ error: true, message: "Server error", data: null });
         }
+    },
+    likeMessage: async (req, res) => {
+        const { messageId, username, sender, recipient } = req.body;
+
+        try {
+            const message = await messageDb.findById(messageId);
+
+            if (!message) {
+                return res.send({ error: true, message: "Message not found", data: null });
+            }
+
+            if (message.liked.includes(username)) {
+                return res.send({ error: true, message: "Already liked", data: null });
+            }
+
+            // Add the like
+            message.liked.push(username);
+            await message.save();
+
+            // Fetch all related messages between the sender and recipient
+            const messages = await messageDb.find({
+                $or: [
+                    { sender: sender.username, recipient: recipient.username },
+                    { sender: recipient.username, recipient: sender.username }
+                ]
+            }).sort({ timestamp: 1 });
+
+            // Fetch sender and recipient details once
+            const [senderUser, recipientUser] = await Promise.all([
+                userDb.findOne({ username: sender.username }).select('username image'),
+                userDb.findOne({ username: recipient.username }).select('username image')
+            ]);
+
+            // Add sender and recipient images to each message correctly
+            const messagesWithImages = messages.map(msg => ({
+                ...msg.toObject(),
+                senderImage: msg.sender === sender.username ? senderUser?.image : recipientUser?.image,
+                recipientImage: msg.recipient === recipient.username ? recipientUser?.image : senderUser?.image
+            }));
+
+            res.send({ error: false, message: "Message liked successfully", data: messagesWithImages });
+        } catch (error) {
+            console.error("Error liking message:", error);
+            res.send({ error: true, message: "Server error", data: null });
+        }
     }
+    ,
 
 };

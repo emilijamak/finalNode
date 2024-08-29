@@ -1,11 +1,12 @@
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
-const http = require("http")
+const http = require("http");
 const { Server } = require("socket.io");
-const { createServer } = require("http");
 const mainRouter = require("./routers/mainRouter");
+const socketController = require("./controllers/socketController"); // Import the socket controller
 require("dotenv").config();
+
 const app = express();
 
 mongoose.connect(process.env.MONGO_KEY)
@@ -27,28 +28,12 @@ const io = new Server(httpServer, {
     }
 });
 
+// Delegate connection handling to the socket controller
 io.on('connection', (socket) => {
-
-    //welcome when a user connects
-    socket.emit('message', 'welcome to the chat')
-
-    //when user connects
-    socket.broadcast.emit('message', 'A user has joined the chat')
-
-
-    //lsiten for chatmessage
-
-    socket.on('chatMessage', (message) => {
-        console.log(message)
-    })
-
-    //disconnects
-    socket.on('disconnect', () => {
-        io.emit('message', 'a user has left the chat')
-    })
-
+    socketController.handleConnection(socket, io);
 });
-const PORT = process.env.PORT ||  2000;
+
+const PORT = process.env.PORT || 2000;
 
 httpServer.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
