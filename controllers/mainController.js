@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const resSend = require('../plugins/sendRes');
 const userDb = require("../schemas/userSchema");
 const messageDb = require("../schemas/messageSchema")
+const conversationDb = require("../schemas/conversationSchema")
 const { io } = require('../app'); // Adjust the path to where your socket instance is exported
 
 
@@ -177,8 +178,39 @@ module.exports = {
         };
 
         try {
+            // Save the new message
             const newMessage = new messageDb(msg);
             const savedMessage = await newMessage.save();
+
+            // Find sender and recipient users
+            const senderUser = await userDb.findOne({ username: sender });
+            const recipientUser = await userDb.findOne({ username: recipient });
+
+            if (!senderUser || !recipientUser) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+
+            // Find existing conversation
+            let conversation = await conversationDb.findOne({
+                participants: {
+                    $all: [senderUser._id, recipientUser._id]
+                }
+            });
+
+            if (conversation) {
+                // Conversation exists, update it
+                conversation.messages.push(savedMessage._id);
+                conversation.lastMessage = savedMessage._id;
+                await conversation.save();  // Save the updated conversation
+            } else {
+                // Create a new conversation
+                const newConversation = new conversationDb({
+                    participants: [senderUser._id, recipientUser._id],
+                    messages: [savedMessage._id],
+                    lastMessage: savedMessage._id
+                });
+                conversation = await newConversation.save();  // Save the new conversation
+            }
 
             // Include the id in the response
             res.send({
@@ -191,6 +223,7 @@ module.exports = {
             });
 
         } catch (error) {
+            console.error("Error sending message:", error);
             res.send({
                 error: true,
                 message: "Error",
@@ -198,7 +231,6 @@ module.exports = {
             });
         }
     },
-
     getMessages: async (req, res) => {
         const { sender, recipient } = req.params;
 
@@ -235,7 +267,41 @@ module.exports = {
             console.error("Error fetching messages:", error);
             res.send({ error: true, message: "Server error", data: null });
         }
+    },getUserConversations: async (req, res) => {
+        const { userID } = req.params;
+
+        try {
+            // Fetch conversations and populate fields
+            const conversations = await conversationDb.find({
+                participants: { $in: [userID] }
+            })
+                .populate('participants', 'username image') // Populate participant details
+                .populate({
+                    path: 'messages',
+                    populate: [
+                        { path: 'sender', select: 'username image' },
+                        { path: 'recipient', select: 'username image' }
+                    ]
+                })
+                .populate({
+                    path: 'lastMessage',
+                    populate: [
+                        { path: 'sender', select: 'username image' },
+                        { path: 'recipient', select: 'username image' }
+                    ]
+                });
+
+            if (conversations) {
+                res.send({ error: false, data: conversations });
+            } else {
+                res.send({ error: true, data: null, message: 'Failed fetching conversations' });
+            }
+        } catch (error) {
+            console.error("Error fetching conversations:", error);
+            res.status(500).send({ error: true, message: 'Server error' });
+        }
     },
+
     likeMessage: async (req, res) => {
         const { messageId, username, sender, recipient } = req.body;
 
@@ -280,7 +346,60 @@ module.exports = {
             console.error("Error liking message:", error);
             res.send({ error: true, message: "Server error", data: null });
         }
-    }
-    ,
+    },
+    deleteConversation: async (req, res) => {
+
+        const { conversationId } = req.body;
+
+        console.log(conversationId)
+
+        // try {
+        //     // Find the conversation by ID
+        //     const conversation = await conversationDb.findById(conversationID);
+        //
+        //     if (!conversation) {
+        //         return res.send({ error: true, message: "Conversation not found", data: null });
+        //     }
+        //
+        //     // Extract message IDs from the conversation
+        //     const messageIDs = conversation.messages;
+        //
+        //     // Delete all messages associated with the conversation
+        //     await messageDb.deleteMany({ _id: { $in: messageIDs } });
+        //
+        //     // Delete the conversation
+        //     await conversationDb.findByIdAndDelete(conversationID);
+        //
+        //     // Optionally, fetch updated conversations if needed
+        //     const updatedConversations = await conversationDb.find().populate('participants', 'username image');
+        //
+        //     // Send success response
+        //     res.send({ error: false, message: "Conversation deleted successfully", data: updatedConversations });
+        // } catch (error) {
+        //     console.error("Error deleting conversation:", error);
+        //     res.send({ error: true, message: "Server error", data: null });
+        // }
+    },
+    deleteAcc: async (req, res) => {
+        const { userID } = req.body;
+
+        try {
+            // Delete the user
+            const deletedUser = await userDb.findByIdAndDelete(userID);
+
+            if (!deletedUser) {
+                return res.send({ error: true, message: "User not found", data: null });
+            }
+
+            // Optionally: Delete related data, like messages
+            await messageDb.deleteMany({ sender: deletedUser.username });
+            const users = await userDb.find().select('-password');
+            // Send a response
+            res.send({ error: false, message: "Account deleted successfully", data: users});
+        } catch (error) {
+            console.error("Error deleting account:", error);
+            res.send({ error: true, message: "Server error", data: null });
+        }
+    },
 
 };

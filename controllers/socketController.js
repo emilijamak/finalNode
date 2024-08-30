@@ -8,9 +8,9 @@ module.exports = {
 
         // Listen for chat messages
         socket.on('chatMessage', (message) => {
-            console.log(message)
             // Broadcast the message object to other users
             io.emit('message', message);
+            io.emit('messageReceived')
         });
 
         socket.on('profileUpdated', (updatedProfile) => {
@@ -21,6 +21,10 @@ module.exports = {
             // Broadcast the updated profile to all connected clients
             io.emit('registeredUsers', users);
         });
+        socket.on('deletedAcc', (users) => {
+            // Broadcast the updated profile to all connected clients
+            io.emit('deletedAcc', users);
+        });
 
         // Handle user disconnect
         socket.on('disconnect', () => {
@@ -28,7 +32,6 @@ module.exports = {
         });
 
         socket.on('likeMessage', (messages) => {
-            console.log('Received likeMessage with messageId:', messages);
             io.emit('likeMessage', messages);  // Emit to all connected clients
         });
     }

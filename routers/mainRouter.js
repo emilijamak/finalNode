@@ -3,7 +3,7 @@ const Router = express.Router()
 const {
     register,
     login, changeImage, changeUsername, changePassword, getAllUsers, getUserByUsername, sendMessage, getMessages,
-    likeMessage
+    likeMessage, deleteAcc, getUserConversations, getConversationDetails, deleteConversation
 } = require("../controllers/mainController")
 
 
@@ -26,6 +26,10 @@ Router.get('/get-all-users', getAllUsers)
 Router.get('/get-user/:username', getUserByUsername)
 Router.get('/get-messages/:sender/:recipient', getMessages);
 Router.post('/like-message', authMiddle, likeMessage)
+Router.post('/delete-account', authMiddle, deleteAcc)
+Router.get('/conversations/:userID', getUserConversations)
+Router.post('/deleteConversation/:conversationId', authMiddle, deleteConversation)
+
 
 
 
