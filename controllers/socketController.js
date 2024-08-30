@@ -12,6 +12,12 @@ module.exports = {
             io.emit('message', message);
             io.emit('messageReceived')
         });
+        // Listen for chat delete
+        socket.on('deleteConversation', (conversations) => {
+            // Broadcast the message object to other users
+            io.emit('conversationDeleted', conversations)
+        });
+
 
         socket.on('profileUpdated', (updatedProfile) => {
             // Broadcast the updated profile to all connected clients

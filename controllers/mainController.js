@@ -269,15 +269,25 @@ module.exports = {
         }
     },getUserConversations: async (req, res) => {
         const { userID } = req.params;
+        const { lastUpdatedAfter } = req.query;  // Optional query parameter to filter by date
 
         try {
-            // Fetch conversations and populate fields
-            const conversations = await conversationDb.find({
+            // Create a query filter
+            let query = {
                 participants: { $in: [userID] }
-            })
-                .populate('participants', 'username image') // Populate participant details
+            };
+
+            // If the client passes a `lastUpdatedAfter` parameter, filter by it
+            if (lastUpdatedAfter) {
+                query.updatedAt = { $gt: new Date(lastUpdatedAfter) };
+            }
+
+            // Fetch conversations, filter by updatedAt if provided, and populate fields
+            const conversations = await conversationDb.find(query)
+                .populate('participants', 'username image')  // Populate participant details
                 .populate({
                     path: 'messages',
+                    options: { sort: { timestamp: -1 } },  // Sort messages by timestamp (newest first)
                     populate: [
                         { path: 'sender', select: 'username image' },
                         { path: 'recipient', select: 'username image' }
@@ -289,7 +299,8 @@ module.exports = {
                         { path: 'sender', select: 'username image' },
                         { path: 'recipient', select: 'username image' }
                     ]
-                });
+                })
+                .sort({ updatedAt: -1 });  // Sort conversations by the latest update (newest first)
 
             if (conversations) {
                 res.send({ error: false, data: conversations });
@@ -301,6 +312,7 @@ module.exports = {
             res.status(500).send({ error: true, message: 'Server error' });
         }
     },
+
 
     likeMessage: async (req, res) => {
         const { messageId, username, sender, recipient } = req.body;
@@ -348,37 +360,45 @@ module.exports = {
         }
     },
     deleteConversation: async (req, res) => {
+        const { conversationId, userId } = req.body;
 
-        const { conversationId } = req.body;
 
-        console.log(conversationId)
+        try {
+            // Find the conversation by ID
+            const conversation = await conversationDb.findById(conversationId);
 
-        // try {
-        //     // Find the conversation by ID
-        //     const conversation = await conversationDb.findById(conversationID);
-        //
-        //     if (!conversation) {
-        //         return res.send({ error: true, message: "Conversation not found", data: null });
-        //     }
-        //
-        //     // Extract message IDs from the conversation
-        //     const messageIDs = conversation.messages;
-        //
-        //     // Delete all messages associated with the conversation
-        //     await messageDb.deleteMany({ _id: { $in: messageIDs } });
-        //
-        //     // Delete the conversation
-        //     await conversationDb.findByIdAndDelete(conversationID);
-        //
-        //     // Optionally, fetch updated conversations if needed
-        //     const updatedConversations = await conversationDb.find().populate('participants', 'username image');
-        //
-        //     // Send success response
-        //     res.send({ error: false, message: "Conversation deleted successfully", data: updatedConversations });
-        // } catch (error) {
-        //     console.error("Error deleting conversation:", error);
-        //     res.send({ error: true, message: "Server error", data: null });
-        // }
+            if (!conversation) {
+                return res.send({ error: true, message: "Conversation not found", data: null });
+            }
+
+            // Extract message IDs from the conversation
+            const messageIDs = conversation.messages;
+
+            // Delete all messages associated with the conversation
+            await messageDb.deleteMany({ _id: { $in: messageIDs } });
+
+            // Delete the conversation
+            await conversationDb.findByIdAndDelete(conversationId);
+
+            // Fetch the remaining conversations for the user
+            const remainingConversations = await conversationDb.find({
+                participants: { $in: [userId] }
+            })
+                .populate('participants', 'username image')  // Populate participant details
+                .populate({
+                    path: 'lastMessage',
+                    populate: [
+                        { path: 'sender', select: 'username image' },
+                        { path: 'recipient', select: 'username image' }
+                    ]
+                });
+
+            // Send success response with the remaining conversations
+            res.send({ error: false, message: "Conversation deleted successfully", data: remainingConversations });
+        } catch (error) {
+            console.error("Error deleting conversation:", error);
+            res.send({ error: true, message: "Server error", data: null });
+        }
     },
     deleteAcc: async (req, res) => {
         const { userID } = req.body;
