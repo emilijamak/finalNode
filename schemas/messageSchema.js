@@ -26,6 +26,12 @@ const messageSchema = new Schema({
     liked: {
         type: [String],
         default: []
+    },
+    senderImage: {
+        type: String
+    },
+    recipientImage: {
+        type: String
     }
 
 });
