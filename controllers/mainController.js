@@ -4,10 +4,12 @@ const resSend = require('../plugins/sendRes');
 const userDb = require("../schemas/userSchema");
 const messageDb = require("../schemas/messageSchema")
 const conversationDb = require("../schemas/conversationSchema")
+const publicRoomDb = require("../schemas/publicRoomSchema")
 const {io} = require('../app'); // Adjust the path to where your socket instance is exported
 
 
 module.exports = {
+
 
     register: async (req, res) => {
         const {password, username} = req.body;
@@ -182,34 +184,46 @@ module.exports = {
             const newMessage = new messageDb(msg);
             const savedMessage = await newMessage.save();
 
-            // Find sender and recipient users
-            const senderUser = await userDb.findOne({username: sender});
-            const recipientUser = await userDb.findOne({username: recipient});
-
-            if (!senderUser || !recipientUser) {
-                return res.status(404).json({message: 'User not found'});
-            }
-
-            // Find existing conversation
-            let conversation = await conversationDb.findOne({
-                participants: {
-                    $all: [senderUser._id, recipientUser._id]
+            // For public-room, find or create the conversation
+            let conversation;
+            if (recipient === 'public-room') {
+                conversation = await publicRoomDb.findOne({participants: ['public-room']});
+                if (conversation) {
+                    // Update existing public-room conversation
+                    conversation.messages.push(savedMessage._id);
+                    conversation.lastMessage = savedMessage._id;
+                    await conversation.save();
                 }
-            });
-
-            if (conversation) {
-                // Conversation exists, update it
-                conversation.messages.push(savedMessage._id);
-                conversation.lastMessage = savedMessage._id;
-                await conversation.save();  // Save the updated conversation
             } else {
-                // Create a new conversation
-                const newConversation = new conversationDb({
-                    participants: [senderUser._id, recipientUser._id],
-                    messages: [savedMessage._id],
-                    lastMessage: savedMessage._id
+                // Handle private conversations
+                const senderUser = await userDb.findOne({username: sender});
+                const recipientUser = await userDb.findOne({username: recipient});
+
+                if (!senderUser || !recipientUser) {
+                    return res.status(404).json({message: 'User not found'});
+                }
+
+                // Find existing conversation
+                conversation = await conversationDb.findOne({
+                    participants: {
+                        $all: [senderUser._id, recipientUser._id]
+                    }
                 });
-                conversation = await newConversation.save();  // Save the new conversation
+
+                if (conversation) {
+                    // Update existing conversation
+                    conversation.messages.push(savedMessage._id);
+                    conversation.lastMessage = savedMessage._id;
+                    await conversation.save();  // Save the updated conversation
+                } else {
+                    // Create a new conversation
+                    const newConversation = new conversationDb({
+                        participants: [senderUser._id, recipientUser._id],
+                        messages: [savedMessage._id],
+                        lastMessage: savedMessage._id
+                    });
+                    conversation = await newConversation.save();  // Save the new conversation
+                }
             }
 
             // Include the id in the response
@@ -231,6 +245,24 @@ module.exports = {
             });
         }
     },
+    getPublicRoomMessages: async (req, res) => {
+        try {
+            // Find the public room
+            const publicRoom = await publicRoomDb.findOne({participants: ['public-room']}).populate('messages');
+
+            if (!publicRoom) {
+                return res.send({error: true, message: "Public room not found", data: null});
+            }
+
+            // Fetch messages
+            const messages = await messageDb.find({_id: {$in: publicRoom.messages}}).sort({timestamp: 1}); // Sort by timestamp
+
+            res.send({error: false, message: "Messages fetched successfully", data: messages});
+        } catch (error) {
+            console.error("Error fetching public room messages:", error);
+            res.send({error: true, message: "Server error", data: null});
+        }
+    },
     getMessages: async (req, res) => {
         const {sender, recipient} = req.params;
 
@@ -248,7 +280,6 @@ module.exports = {
                 userDb.findOne({username: sender}).select('username image'),
                 userDb.findOne({username: recipient}).select('username image')
             ]);
-
 
 
             // Add sender and recipient images to each message
@@ -330,7 +361,6 @@ module.exports = {
                 });
 
 
-
             if (conversation) {
                 res.send({error: false, data: conversation});
             } else {
@@ -347,7 +377,10 @@ module.exports = {
     likeMessage: async (req, res) => {
         const {messageId, username, sender, recipient} = req.body;
 
+        console.log(username)
+
         try {
+            // Find the message to like
             const message = await messageDb.findById(messageId);
 
             if (!message) {
@@ -358,32 +391,39 @@ module.exports = {
                 return res.send({error: true, message: "Already liked", data: null});
             }
 
-            // Add the like
+            // Add the like to the message
             message.liked.push(username);
             await message.save();
 
-            // Fetch all related messages between the sender and recipient
-            const messages = await messageDb.find({
-                $or: [
-                    {sender: sender.username, recipient: recipient.username},
-                    {sender: recipient.username, recipient: sender.username}
-                ]
-            }).sort({timestamp: 1});
+            // If the recipient is not 'public-room', fetch related messages and images
+            if (recipient !== 'public-room') {
+                // Fetch messages between the sender and recipient
+                const messages = await messageDb.find({
+                    $or: [
+                        {sender: sender?.username, recipient: recipient?.username},
+                        {sender: recipient?.username, recipient: sender?.username}
+                    ]
+                }).sort({timestamp: 1});
 
-            // Fetch sender and recipient details once
-            const [senderUser, recipientUser] = await Promise.all([
-                userDb.findOne({username: sender.username}).select('username image'),
-                userDb.findOne({username: recipient.username}).select('username image')
-            ]);
+                // Fetch sender and recipient details
+                const [senderUser, recipientUser] = await Promise.all([
+                    userDb.findOne({username: sender?.username}).select('username image'),
+                    userDb.findOne({username: recipient?.username}).select('username image')
+                ]);
 
-            // Add sender and recipient images to each message correctly
-            const messagesWithImages = messages.map(msg => ({
-                ...msg.toObject(),
-                senderImage: msg.sender === sender.username ? senderUser?.image : recipientUser?.image,
-                recipientImage: msg.recipient === recipient.username ? recipientUser?.image : senderUser?.image
-            }));
+                // Add sender and recipient images to each message correctly
+                const messagesWithImages = messages.map(msg => ({
+                    ...msg.toObject(),
+                    senderImage: msg.sender === sender.username ? senderUser?.image : recipientUser?.image,
+                    recipientImage: msg.recipient === recipient.username ? recipientUser?.image : senderUser?.image
+                }));
 
-            res.send({error: false, message: "Message liked successfully", data: messagesWithImages});
+                return res.send({error: false, message: "Message liked successfully", data: messagesWithImages});
+            }
+
+            // If recipient is 'public-room', just return a success message
+            res.send({error: false, message: "Message liked successfully", data: null});
+
         } catch (error) {
             console.error("Error liking message:", error);
             res.send({error: true, message: "Server error", data: null});
@@ -451,5 +491,6 @@ module.exports = {
             res.send({error: true, message: "Server error", data: null});
         }
     },
+
 
 };

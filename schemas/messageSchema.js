@@ -8,7 +8,7 @@ const messageSchema = new Schema({
     },
     recipient: {
         type: String,
-        required: true
+        required: false
     },
     message: {
         type: String,
