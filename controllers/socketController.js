@@ -1,10 +1,10 @@
 module.exports = {
     handleConnection: (socket, io) => {
-        // Emit a welcome message when a user connects
-        socket.emit('info', { type: 'system', content: 'Welcome to the chat' });
-
-        // Broadcast to others when a user connects
-        socket.broadcast.emit('info', { type: 'system', content: 'A user has joined the chat' });
+        // // Emit a welcome message when a user connects
+        // socket.emit('info', { type: 'system', content: 'Welcome to the chat' });
+        //
+        // // Broadcast to others when a user connects
+        // socket.broadcast.emit('info', { type: 'system', content: 'A user has joined the chat' });
 
         // Listen for chat messages
         socket.on('chatMessage', (message) => {
@@ -12,6 +12,17 @@ module.exports = {
             io.emit('message', message);
             io.emit('messageReceived')
         });
+        // Listen for chat messages
+        socket.on('privateChatMessage', (message) => {
+            // Broadcast the message object to other users
+            io.emit('privateMessage', message);
+            io.emit('messageReceived')
+        });
+
+        socket.on('userAdded', () => {
+            io.emit('messageReceived')
+
+        })
         // Listen for chat delete
         socket.on('deleteConversation', (conversations) => {
             // Broadcast the message object to other users

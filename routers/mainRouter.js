@@ -4,7 +4,7 @@ const {
     register,
     login, changeImage, changeUsername, changePassword, getAllUsers, getUserByUsername, sendMessage, getMessages,
     likeMessage, deleteAcc, getUserConversations, getConversationDetails, deleteConversation, getConversationById,
-    getPublicRoomMessages
+    getPublicRoomMessages, addUser, likeMessagePrivate, getNonParticipants
 } = require("../controllers/mainController")
 
 
@@ -27,11 +27,14 @@ Router.get('/get-all-users', getAllUsers)
 Router.get('/get-user/:username', getUserByUsername)
 Router.get('/get-messages/:sender/:recipient', getMessages);
 Router.post('/like-message', authMiddle, likeMessage)
+Router.post('/like-message-private', authMiddle, likeMessagePrivate)
 Router.post('/delete-account', authMiddle, deleteAcc)
 Router.get('/conversations/:userID', getUserConversations)
 Router.get('/conversation/:conversationId', getConversationById)
 Router.get('/get-public-room-messages', getPublicRoomMessages)
+Router.get('/conversation/:conversationId/non-participants', getNonParticipants)
 Router.post('/deleteConversation/:conversationId', authMiddle, deleteConversation)
+Router.post('/conversation/:conversationId/:username', authMiddle, addUser)
 
 
 

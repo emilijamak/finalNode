@@ -33,9 +33,9 @@ module.exports = {
         const users = await userDb.find().select('-password');
 
         if (users) {
-            res.send({error: false, message: "success", data: users});
+            res.send({error: false, message: "Success", data: users});
         } else {
-            res.send({error: true, message: "could not register", data: null});
+            res.send({error: true, message: "Error", data: null});
         }
     },
     login: async (req, res) => {
@@ -43,7 +43,7 @@ module.exports = {
         const currentUser = await userDb.findOne({username: username});
 
         if (!currentUser) {
-            return res.send({error: true, message: "user doesn't exist", data: null});
+            return res.send({error: true, message: "User does not exist", data: null});
         }
 
         const passHash = currentUser.password;
@@ -60,7 +60,7 @@ module.exports = {
 
             return resSend(res, true, null, {token, updatedUser});
         } else {
-            res.send({error: true, message: "bad credentials", data: null});
+            res.send({error: true, message: "Bad credentials", data: null});
         }
     },
     changeImage: async (req, res) => {
@@ -245,6 +245,31 @@ module.exports = {
             });
         }
     },
+    getNonParticipants: async (req, res) => {
+        const { conversationId } = req.params;
+
+        try {
+            // Fetch the conversation
+            const conversation = await conversationDb.findById(conversationId).populate('participants', 'username');
+
+            if (!conversation) {
+                return res.send({ error: true, message: 'Conversation not found', data: null });
+            }
+
+            // Extract participant IDs from the conversation
+            const participantIds = conversation.participants.map(participant => participant._id);
+
+            // Fetch all users excluding those who are participants in the conversation
+            const nonParticipants = await userDb.find({
+                _id: { $nin: participantIds }
+            }).select('-password'); // Exclude passwords from the result
+
+            res.send({ error: false, message: 'Non-participants fetched successfully', data: nonParticipants });
+        } catch (error) {
+            console.error('Error fetching non-participants:', error);
+            res.send({ error: true, message: 'Server error', data: null });
+        }
+    },
     getPublicRoomMessages: async (req, res) => {
         try {
             // Find the public room
@@ -370,29 +395,29 @@ module.exports = {
             console.error("Error fetching conversation:", error);
             res.status(500).send({error: true, message: 'Server error'});
         }
-    }
-    ,
-
-
+    },
     likeMessage: async (req, res) => {
         const {messageId, username, sender, recipient} = req.body;
 
-        console.log(username)
-
         try {
-            // Find the message to like
+            // Find the message to like/unlike
             const message = await messageDb.findById(messageId);
 
             if (!message) {
                 return res.send({error: true, message: "Message not found", data: null});
             }
 
-            if (message.liked.includes(username)) {
-                return res.send({error: true, message: "Already liked", data: null});
+            // Check if the user has already liked the message
+            const likedIndex = message.liked.indexOf(username);
+
+            if (likedIndex !== -1) {
+                // If already liked, remove the like (unlike)
+                message.liked.splice(likedIndex, 1);
+            } else {
+                // Otherwise, add the like
+                message.liked.push(username);
             }
 
-            // Add the like to the message
-            message.liked.push(username);
             await message.save();
 
             // If the recipient is not 'public-room', fetch related messages and images
@@ -418,14 +443,79 @@ module.exports = {
                     recipientImage: msg.recipient === recipient.username ? recipientUser?.image : senderUser?.image
                 }));
 
-                return res.send({error: false, message: "Message liked successfully", data: messagesWithImages});
+                return res.send({error: false, message: "Message like/unlike successful", data: messagesWithImages});
             }
 
             // If recipient is 'public-room', just return a success message
-            res.send({error: false, message: "Message liked successfully", data: null});
+            res.send({error: false, message: "Message like/unlike successful", data: null});
 
         } catch (error) {
-            console.error("Error liking message:", error);
+            console.error("Error liking/unliking message:", error);
+            res.send({error: true, message: "Server error", data: null});
+        }
+    },
+
+    likeMessagePrivate: async (req, res) => {
+        const {messageId, username, sender, recipient} = req.body;
+
+        try {
+            // Find the message to like/unlike
+            const message = await messageDb.findById(messageId);
+
+            if (!message) {
+                return res.send({error: true, message: "Message not found", data: null});
+            }
+
+            // Check if the user has already liked the message
+            const likedIndex = message.liked.indexOf(username);
+
+            if (likedIndex !== -1) {
+                // If already liked, remove the like (unlike)
+                message.liked.splice(likedIndex, 1);
+            } else {
+                // Otherwise, add the like
+                message.liked.push(username);
+            }
+
+            await message.save();
+
+            // Fetch conversation that includes this message
+            const conversation = await conversationDb.findOne({messages: messageId})
+                .populate({
+                    path: 'messages',
+                    options: {sort: {timestamp: 1}},  // Sort messages by timestamp
+                    populate: [
+                        {path: 'sender', select: 'username image'},  // Populate sender details
+                        {path: 'recipient', select: 'username image'}  // Populate recipient details
+                    ]
+                })
+                .populate('participants', 'username image');  // Populate participants' details
+
+            if (!conversation) {
+                return res.send({error: true, message: "Conversation not found", data: null});
+            }
+
+            // Add sender and recipient images to each message
+            const messagesWithImages = conversation.messages.map(msg => {
+                const senderUser = conversation.participants.find(user => user.username === msg.sender);
+                const recipientUser = conversation.participants.find(user => user.username === msg.recipient);
+
+                return {
+                    ...msg.toObject(),
+                    senderImage: senderUser?.image || null,
+                    recipientImage: recipientUser?.image || null
+                };
+            });
+
+            // Return the updated messages with images
+            res.send({
+                error: false,
+                message: "Message like/unlike successful",
+                data: messagesWithImages
+            });
+
+        } catch (error) {
+            console.error("Error liking/unliking message:", error);
             res.send({error: true, message: "Server error", data: null});
         }
     },
@@ -491,6 +581,42 @@ module.exports = {
             res.send({error: true, message: "Server error", data: null});
         }
     },
+    addUser: async (req, res) => {
+        const {conversationId, username} = req.params;
+        console.log(username)
+
+        console.log("Backend received username:", username); // Log the username here
+
+        try {
+            // Check if the user exists
+            const user = await userDb.findOne({username});
+            if (!user) {
+                return res.send({error: true, message: 'User not found', data: null});
+            }
+
+            // Find the conversation and add the user to participants
+            const conversation = await conversationDb.findById(conversationId);
+            if (!conversation) {
+                return res.send({error: true, message: 'Conversation not found', data: null});
+            }
+
+            if (conversation.participants.includes(user._id)) {
+                return res.send({error: true, message: 'User is already in the conversation', data: null});
+            }
+
+            conversation.participants.push(user._id);
+            await conversation.save();
+
+            // Send success response only once
+            return res.send({error: false, message: 'User added to the conversation', data: conversation});
+        } catch (err) {
+            console.error('Error adding user to conversation:', err); // Log the error for debugging
+            // Ensure error response is sent only once
+            if (!res.headersSent) {
+                return res.send({error: true, message: 'Server error', data: null});
+            }
+        }
+    }
 
 
 };
