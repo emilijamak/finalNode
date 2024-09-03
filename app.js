@@ -9,11 +9,9 @@ require("dotenv").config();
 
 const app = express();
 
-// server.js or app.js (or wherever your server starts)
 
 const publicRoomDb = require('./schemas/publicRoomSchema');
 
-// Function to create or check the public room conversation
 const initializePublicRoom = async () => {
     try {
         const publicRoom = await publicRoomDb.findOne({participants: ['public-room']});
@@ -33,7 +31,7 @@ const initializePublicRoom = async () => {
     }
 };
 
-// Connect to MongoDB and initialize public room
+
 
 mongoose.connect(process.env.MONGO_KEY)
     .then(() => console.log("DB CONNECT SUCCESS"))
@@ -55,7 +53,7 @@ const io = new Server(httpServer, {
     }
 });
 
-// Delegate connection handling to the socket controller
+
 io.on('connection', (socket) => {
     socketController.handleConnection(socket, io);
 });

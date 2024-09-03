@@ -114,7 +114,6 @@ module.exports = {
             const {password, ...user} = updatedUser.toObject();
 
 
-            // Successfully updated the user's image
             res.send({error: false, message: "Username successfully updated", user});
         } catch (error) {
             console.error("Error updating image:", error);
@@ -132,13 +131,10 @@ module.exports = {
         }
 
         try {
-            // Hash the new password
             const salt = await bcrypt.genSalt(10);
-            // Update the user's password
             currentUser.password = await bcrypt.hash(password, salt);
             await currentUser.save();
 
-            // Send success response
             res.send({error: false, message: "Password changed successfully", data: null});
         } catch (error) {
             console.error("Error changing password:", error);
@@ -180,11 +176,9 @@ module.exports = {
         };
 
         try {
-            // Save the new message
             const newMessage = new messageDb(msg);
             const savedMessage = await newMessage.save();
 
-            // For public-room, find or create the conversation
             let conversation;
             if (recipient === 'public-room') {
                 conversation = await publicRoomDb.findOne({participants: ['public-room']});
@@ -195,7 +189,6 @@ module.exports = {
                     await conversation.save();
                 }
             } else {
-                // Handle private conversations
                 const senderUser = await userDb.findOne({username: sender});
                 const recipientUser = await userDb.findOne({username: recipient});
 
@@ -203,7 +196,6 @@ module.exports = {
                     return res.status(404).json({message: 'User not found'});
                 }
 
-                // Find existing conversation
                 conversation = await conversationDb.findOne({
                     participants: {
                         $all: [senderUser._id, recipientUser._id]
@@ -211,12 +203,10 @@ module.exports = {
                 });
 
                 if (conversation) {
-                    // Update existing conversation
                     conversation.messages.push(savedMessage._id);
                     conversation.lastMessage = savedMessage._id;
                     await conversation.save();  // Save the updated conversation
                 } else {
-                    // Create a new conversation
                     const newConversation = new conversationDb({
                         participants: [senderUser._id, recipientUser._id],
                         messages: [savedMessage._id],
@@ -226,7 +216,6 @@ module.exports = {
                 }
             }
 
-            // Include the id in the response
             res.send({
                 error: false,
                 message: "Message sent successfully",
@@ -249,17 +238,13 @@ module.exports = {
         const { conversationId } = req.params;
 
         try {
-            // Fetch the conversation
             const conversation = await conversationDb.findById(conversationId).populate('participants', 'username');
 
             if (!conversation) {
                 return res.send({ error: true, message: 'Conversation not found', data: null });
             }
-
-            // Extract participant IDs from the conversation
             const participantIds = conversation.participants.map(participant => participant._id);
 
-            // Fetch all users excluding those who are participants in the conversation
             const nonParticipants = await userDb.find({
                 _id: { $nin: participantIds }
             }).select('-password'); // Exclude passwords from the result
@@ -272,14 +257,12 @@ module.exports = {
     },
     getPublicRoomMessages: async (req, res) => {
         try {
-            // Find the public room
             const publicRoom = await publicRoomDb.findOne({participants: ['public-room']}).populate('messages');
 
             if (!publicRoom) {
                 return res.send({error: true, message: "Public room not found", data: null});
             }
 
-            // Fetch messages
             const messages = await messageDb.find({_id: {$in: publicRoom.messages}}).sort({timestamp: 1}); // Sort by timestamp
 
             res.send({error: false, message: "Messages fetched successfully", data: messages});
@@ -292,7 +275,6 @@ module.exports = {
         const {sender, recipient} = req.params;
 
         try {
-            // Fetch messages
             const messages = await messageDb.find({
                 $or: [
                     {sender: sender, recipient: recipient},
@@ -300,14 +282,12 @@ module.exports = {
                 ]
             }).sort({timestamp: 1}); // Sort messages by timestamp in ascending order
 
-            // Fetch sender and recipient details
             const [senderUser, recipientUser] = await Promise.all([
                 userDb.findOne({username: sender}).select('username image'),
                 userDb.findOne({username: recipient}).select('username image')
             ]);
 
 
-            // Add sender and recipient images to each message
             const messagesWithImages = messages.map(message => ({
                 ...message.toObject(), // Convert Mongoose document to plain object
                 senderImage: senderUser?.image || null,
@@ -330,17 +310,14 @@ module.exports = {
         const {lastUpdatedAfter} = req.query;  // Optional query parameter to filter by date
 
         try {
-            // Create a query filter
             let query = {
                 participants: {$in: [userID]}
             };
 
-            // If the client passes a `lastUpdatedAfter` parameter, filter by it
             if (lastUpdatedAfter) {
                 query.updatedAt = {$gt: new Date(lastUpdatedAfter)};
             }
 
-            // Fetch conversations, filter by updatedAt if provided, and populate fields
             const conversations = await conversationDb.find(query)
                 .populate('participants', 'username image')  // Populate participant details
                 .populate({
@@ -400,29 +377,23 @@ module.exports = {
         const {messageId, username, sender, recipient} = req.body;
 
         try {
-            // Find the message to like/unlike
             const message = await messageDb.findById(messageId);
 
             if (!message) {
                 return res.send({error: true, message: "Message not found", data: null});
             }
 
-            // Check if the user has already liked the message
             const likedIndex = message.liked.indexOf(username);
 
             if (likedIndex !== -1) {
-                // If already liked, remove the like (unlike)
                 message.liked.splice(likedIndex, 1);
             } else {
-                // Otherwise, add the like
                 message.liked.push(username);
             }
 
             await message.save();
 
-            // If the recipient is not 'public-room', fetch related messages and images
             if (recipient !== 'public-room') {
-                // Fetch messages between the sender and recipient
                 const messages = await messageDb.find({
                     $or: [
                         {sender: sender?.username, recipient: recipient?.username},
@@ -430,13 +401,11 @@ module.exports = {
                     ]
                 }).sort({timestamp: 1});
 
-                // Fetch sender and recipient details
                 const [senderUser, recipientUser] = await Promise.all([
                     userDb.findOne({username: sender?.username}).select('username image'),
                     userDb.findOne({username: recipient?.username}).select('username image')
                 ]);
 
-                // Add sender and recipient images to each message correctly
                 const messagesWithImages = messages.map(msg => ({
                     ...msg.toObject(),
                     senderImage: msg.sender === sender.username ? senderUser?.image : recipientUser?.image,
@@ -446,7 +415,6 @@ module.exports = {
                 return res.send({error: false, message: "Message like/unlike successful", data: messagesWithImages});
             }
 
-            // If recipient is 'public-room', just return a success message
             res.send({error: false, message: "Message like/unlike successful", data: null});
 
         } catch (error) {
@@ -459,27 +427,22 @@ module.exports = {
         const {messageId, username, sender, recipient} = req.body;
 
         try {
-            // Find the message to like/unlike
             const message = await messageDb.findById(messageId);
 
             if (!message) {
                 return res.send({error: true, message: "Message not found", data: null});
             }
 
-            // Check if the user has already liked the message
             const likedIndex = message.liked.indexOf(username);
 
             if (likedIndex !== -1) {
-                // If already liked, remove the like (unlike)
                 message.liked.splice(likedIndex, 1);
             } else {
-                // Otherwise, add the like
                 message.liked.push(username);
             }
 
             await message.save();
 
-            // Fetch conversation that includes this message
             const conversation = await conversationDb.findOne({messages: messageId})
                 .populate({
                     path: 'messages',
@@ -495,7 +458,6 @@ module.exports = {
                 return res.send({error: true, message: "Conversation not found", data: null});
             }
 
-            // Add sender and recipient images to each message
             const messagesWithImages = conversation.messages.map(msg => {
                 const senderUser = conversation.participants.find(user => user.username === msg.sender);
                 const recipientUser = conversation.participants.find(user => user.username === msg.recipient);
@@ -507,7 +469,6 @@ module.exports = {
                 };
             });
 
-            // Return the updated messages with images
             res.send({
                 error: false,
                 message: "Message like/unlike successful",
@@ -524,23 +485,18 @@ module.exports = {
 
 
         try {
-            // Find the conversation by ID
             const conversation = await conversationDb.findById(conversationId);
 
             if (!conversation) {
                 return res.send({error: true, message: "Conversation not found", data: null});
             }
 
-            // Extract message IDs from the conversation
             const messageIDs = conversation.messages;
 
-            // Delete all messages associated with the conversation
             await messageDb.deleteMany({_id: {$in: messageIDs}});
 
-            // Delete the conversation
             await conversationDb.findByIdAndDelete(conversationId);
 
-            // Fetch the remaining conversations for the user
             const remainingConversations = await conversationDb.find({
                 participants: {$in: [userId]}
             })
@@ -553,7 +509,6 @@ module.exports = {
                     ]
                 });
 
-            // Send success response with the remaining conversations
             res.send({error: false, message: "Conversation deleted successfully", data: remainingConversations});
         } catch (error) {
             console.error("Error deleting conversation:", error);
@@ -564,14 +519,12 @@ module.exports = {
         const {userID} = req.body;
 
         try {
-            // Delete the user
             const deletedUser = await userDb.findByIdAndDelete(userID);
 
             if (!deletedUser) {
                 return res.send({error: true, message: "User not found", data: null});
             }
 
-            // Optionally: Delete related data, like messages
             await messageDb.deleteMany({sender: deletedUser.username});
             const users = await userDb.find().select('-password');
             // Send a response
@@ -588,13 +541,11 @@ module.exports = {
         console.log("Backend received username:", username); // Log the username here
 
         try {
-            // Check if the user exists
             const user = await userDb.findOne({username});
             if (!user) {
                 return res.send({error: true, message: 'User not found', data: null});
             }
 
-            // Find the conversation and add the user to participants
             const conversation = await conversationDb.findById(conversationId);
             if (!conversation) {
                 return res.send({error: true, message: 'Conversation not found', data: null});
@@ -607,11 +558,9 @@ module.exports = {
             conversation.participants.push(user._id);
             await conversation.save();
 
-            // Send success response only once
             return res.send({error: false, message: 'User added to the conversation', data: conversation});
         } catch (err) {
             console.error('Error adding user to conversation:', err); // Log the error for debugging
-            // Ensure error response is sent only once
             if (!res.headersSent) {
                 return res.send({error: true, message: 'Server error', data: null});
             }

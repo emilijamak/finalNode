@@ -5,26 +5,26 @@ const conversationSchema = new Schema({
     participants: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "users", // Reference to the User model
+            ref: "users",
             required: true,
         },
     ],
     messages: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "messages", // Reference to the Message model
+            ref: "messages",
         },
     ],
     lastMessage: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "messages", // Reference to the latest message
+        ref: "messages",
     },
     createdAt:
         {
             type: Date,
             default: Date.now
         }
-}, {timestamps: true}); // Automatically manage createdAt and updatedAt fields
+}, {timestamps: true});
 
 const Conversation = mongoose.model("Conversation", conversationSchema);
 

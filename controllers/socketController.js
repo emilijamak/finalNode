@@ -1,10 +1,5 @@
 module.exports = {
     handleConnection: (socket, io) => {
-        // // Emit a welcome message when a user connects
-        // socket.emit('info', { type: 'system', content: 'Welcome to the chat' });
-        //
-        // // Broadcast to others when a user connects
-        // socket.broadcast.emit('info', { type: 'system', content: 'A user has joined the chat' });
 
         // Listen for chat messages
         socket.on('chatMessage', (message) => {
